@@ -57,6 +57,7 @@ public class PartitionManager {
 
     // retryRecords key = Kafka offset, value = retry info for the given message
     Long _committedTo;
+    // NOTE: 2017/2/19 tiny - messages wait to emit [poll from kafka]
     LinkedList<MessageAndOffset> _waitingToEmit = new LinkedList<MessageAndOffset>();
     Partition _partition;
     SpoutConfig _spoutConfig;
@@ -160,7 +161,8 @@ public class PartitionManager {
             } else {
                 tups = KafkaUtils.generateTuples(_spoutConfig, toEmit.message(), _partition.topic);
             }
-            
+
+            // NOTE: 2017/2/19 tiny - emit message
             if ((tups != null) && tups.iterator().hasNext()) {
                if (!Strings.isNullOrEmpty(_spoutConfig.outputStreamId)) {
                     for (List<Object> tup : tups) {
@@ -188,6 +190,7 @@ public class PartitionManager {
         long start = System.currentTimeMillis();
         Long offset;
 
+        // NOTE: 2017/2/19 tiny - mark, acquire failed message by kafka-offset
         // Are there failed tuples? If so, fetch those first.
         offset = this._failedMsgRetryManager.nextFailedMessageToRetry();
         final boolean processingNewTuples = (offset == null);
@@ -260,7 +263,9 @@ public class PartitionManager {
             // Too many things pending!
             _pending.headMap(offset - _spoutConfig.maxOffsetBehind).clear();
         }
+        //// NOTE: 2017/2/19 tiny - remove message which process success
         _pending.remove(offset);
+        // NOTE: 2017/2/19 tiny - remove message from failed records
         this._failedMsgRetryManager.acked(offset);
         numberAcked++;
     }
@@ -285,8 +290,10 @@ public class PartitionManager {
 
             // Offset may not be considered for retry by failedMsgRetryManager
             if (this._failedMsgRetryManager.retryFurther(offset)) {
+                // NOTE: 2017/2/19 tiny - retry
                 this._failedMsgRetryManager.failed(offset);
             } else {
+                // NOTE: 2017/2/19 tiny - noRetry
                 // state for the offset should be cleaned up
                 LOG.warn("Will not retry failed kafka offset {} further", offset);
                 _messageIneligibleForRetryCount.incr();
